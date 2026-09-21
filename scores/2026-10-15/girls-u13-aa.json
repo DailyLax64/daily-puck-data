@@ -1,0 +1,18 @@
+[
+  {
+    "game_id": "owha_u13aa_101",
+    "source_name": "OWHL Southern",
+    "source_type": "league",
+    "gender": "girls",
+    "division": "U13 AA",
+    "date": "2026-10-15",
+    "time": "18:30",
+    "home_name": "Burlington Barracudas",
+    "visitor_name": "Oakville Hornets",
+    "home_goals": 3,
+    "visitor_goals": 1,
+    "status": "final",
+    "home_result": "W",
+    "visitor_result": "L"
+  }
+]
