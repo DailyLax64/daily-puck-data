@@ -1,0 +1,93 @@
+name: GameSheet League Scanner
+
+on:
+  workflow_dispatch:
+    inputs:
+      start_id:
+        description: 'Start Season ID'
+        required: true
+        default: '15500'
+      end_id:
+        description: 'End Season ID'
+        required: true
+        default: '16500'
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Run GameSheet Scanner Script
+        run: |
+          python3 -c "
+          import urllib.request
+          import json
+          import concurrent.futures
+          import csv
+          import sys
+
+          START_ID = int('${{ github.event.inputs.start_id }}')
+          END_ID = int('${{ github.event.inputs.end_id }}')
+
+          def check_season(sid):
+              url = f'https://gamesheetstats.com/api/unified-games/{sid}'
+              req = urllib.request.Request(
+                  url, 
+                  headers={'User-Agent': 'DailyPuckScanner/1.0', 'Accept': 'application/json'}
+              )
+              try:
+                  with urllib.request.urlopen(req, timeout=10) as resp:
+                      if resp.status == 200:
+                          data = json.loads(resp.read().decode('utf-8'))
+                          games = data.get('data', [])
+                          if games:
+                              g0 = games[0]
+                              home = g0.get('home', {}).get('title', '')
+                              visitor = g0.get('visitor', {}).get('title', '')
+                              div = (
+                                  g0.get('division', {}).get('title') or 
+                                  g0.get('divisionTitle') or 
+                                  g0.get('bracket', {}).get('title') or 
+                                  g0.get('pool', {}).get('title') or 
+                                  ''
+                              )
+                              venue = g0.get('location', '')
+                              return {
+                                  'id': sid,
+                                  'game_count': len(games),
+                                  'sample_matchup': f'{home} vs {visitor}',
+                                  'division': div,
+                                  'venue': venue,
+                                  'link': f'https://gamesheetstats.com/seasons/{sid}'
+                              }
+              except Exception:
+                  pass
+              return None
+
+          print(f'Starting scan from ID {START_ID} to {END_ID}...')
+          results = []
+
+          with concurrent.futures.ThreadPoolExecutor(max_workers=30) as executor:
+              futures = {executor.submit(check_season, sid): sid for sid in range(START_ID, END_ID + 1)}
+              for f in concurrent.futures.as_completed(futures):
+                  res = f.result()
+                  if res:
+                      print(f'Found [{res[\"id\"]}]: {res[\"sample_matchup\"]} ({res[\"division\"]}) - {res[\"game_count\"]} games')
+                      results.append(res)
+
+          results.sort(key=lambda x: x['id'])
+
+          with open('gamesheet_leagues_${{ github.event.inputs.start_id }}_${{ github.event.inputs.end_id }}.csv', 'w', newline='', encoding='utf-8') as f:
+              writer = csv.DictWriter(f, fieldnames=['id', 'game_count', 'sample_matchup', 'division', 'venue', 'link'])
+              writer.writeheader()
+              writer.writerows(results)
+
+          print(f'Scan completed! Found {len(results)} active seasons.')
+          "
+
+      - name: Upload CSV Spreadsheet
+        uses: actions/upload-artifact@v4
+        with:
+          name: gamesheet-leagues-csv
+          path: gamesheet_leagues_*.csv
+          retention-days: 7
